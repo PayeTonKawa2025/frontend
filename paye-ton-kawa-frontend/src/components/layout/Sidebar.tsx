@@ -89,7 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2">
         {navigation.map((item) => {
-          const isActive = location.pathname === item.href;
+          const isActive = location.pathname.startsWith(item.href);
           return (
             <Link
               key={item.name}
@@ -132,7 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
           <div className="pt-2">
             <div className="text-xs text-sidebar-foreground/60 mb-1">Connecté en tant que</div>
             <div className="text-sm font-medium text-sidebar-foreground truncate">
-              {user.name}
+              {user.firstname}
             </div>
             <Button
               variant="ghost"

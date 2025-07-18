@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -11,12 +10,12 @@ const AuthDashboard: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary/30 border-t-primary mx-auto"></div>
-          <p className="text-gray-600 font-medium">Chargement de votre espace...</p>
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
+          <div className="text-center space-y-4">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary/30 border-t-primary mx-auto" />
+            <p className="text-gray-600 font-medium">Chargement de votre espace...</p>
+          </div>
         </div>
-      </div>
     );
   }
 

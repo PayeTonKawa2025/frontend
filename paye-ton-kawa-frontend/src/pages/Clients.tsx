@@ -1,7 +1,7 @@
-
 'use client';
 
 import React, { useState } from 'react';
+import PrivateRoute from '@/components/routing/PrivateRoute';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { DataTable } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
@@ -67,22 +67,10 @@ const Clients: React.FC = () => {
   });
 
   const columns = [
-    {
-      key: 'name' as keyof Client,
-      header: 'Nom',
-    },
-    {
-      key: 'email' as keyof Client,
-      header: 'Email',
-    },
-    {
-      key: 'company' as keyof Client,
-      header: 'Entreprise',
-    },
-    {
-      key: 'phone' as keyof Client,
-      header: 'Téléphone',
-    },
+    { key: 'name' as keyof Client, header: 'Nom' },
+    { key: 'email' as keyof Client, header: 'Email' },
+    { key: 'company' as keyof Client, header: 'Entreprise' },
+    { key: 'phone' as keyof Client, header: 'Téléphone' },
     {
       key: 'status' as keyof Client,
       header: 'Statut',
@@ -98,16 +86,13 @@ const Clients: React.FC = () => {
           prospect: 'Prospect',
         };
         return (
-          <Badge variant={variants[value as keyof typeof variants]}>
-            {labels[value as keyof typeof labels]}
-          </Badge>
+            <Badge variant={variants[value as keyof typeof variants]}>
+              {labels[value as keyof typeof labels]}
+            </Badge>
         );
       },
     },
-    {
-      key: 'totalOrders' as keyof Client,
-      header: 'Commandes',
-    },
+    { key: 'totalOrders' as keyof Client, header: 'Commandes' },
   ];
 
   const handleEdit = (client: Client) => {
@@ -150,49 +135,51 @@ const Clients: React.FC = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight">Clients</h2>
-            <p className="text-muted-foreground">
-              Gérez votre base de clients
-            </p>
+      <PrivateRoute>
+        <DashboardLayout>
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-3xl font-bold tracking-tight">Clients</h2>
+                <p className="text-muted-foreground">
+                  Gérez votre base de clients
+                </p>
+              </div>
+            </div>
+
+            <DataTable
+                title="Liste des clients"
+                data={clients}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onAdd={handleAdd}
+            />
+
+            <AddClientModal
+                open={isAddModalOpen}
+                onOpenChange={setIsAddModalOpen}
+                onSubmit={handleAddClient}
+            />
+
+            <EditClientModal
+                open={editModal.open}
+                onOpenChange={(open) => setEditModal({ open, client: null })}
+                client={editModal.client}
+                onSubmit={handleEditClient}
+            />
+
+            <DeleteConfirmationModal
+                open={deleteModal.open}
+                onOpenChange={(open) => setDeleteModal({ open, client: null })}
+                onConfirm={confirmDelete}
+                title="Supprimer le client"
+                description="Êtes-vous sûr de vouloir supprimer ce client ? Cette action supprimera définitivement le client et toutes ses données associées."
+                itemName={deleteModal.client?.name}
+            />
           </div>
-        </div>
-
-        <DataTable
-          title="Liste des clients"
-          data={clients}
-          columns={columns}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onAdd={handleAdd}
-        />
-
-        <AddClientModal
-          open={isAddModalOpen}
-          onOpenChange={setIsAddModalOpen}
-          onSubmit={handleAddClient}
-        />
-
-        <EditClientModal
-          open={editModal.open}
-          onOpenChange={(open) => setEditModal({ open, client: null })}
-          client={editModal.client}
-          onSubmit={handleEditClient}
-        />
-
-        <DeleteConfirmationModal
-          open={deleteModal.open}
-          onOpenChange={(open) => setDeleteModal({ open, client: null })}
-          onConfirm={confirmDelete}
-          title="Supprimer le client"
-          description="Êtes-vous sûr de vouloir supprimer ce client ? Cette action supprimera définitivement le client et toutes ses données associées."
-          itemName={deleteModal.client?.name}
-        />
-      </div>
-    </DashboardLayout>
+        </DashboardLayout>
+      </PrivateRoute>
   );
 };
 

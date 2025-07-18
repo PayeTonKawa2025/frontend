@@ -35,11 +35,10 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
 
   const handleConfirm = async () => {
     setIsDeleting(true);
-    
-    // Simulation d'un appel API
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    onConfirm();
+
+    //Appel de la methode de confirmation de suppression
+    await onConfirm();
+
     setIsDeleting(false);
     onOpenChange(false);
   };
@@ -58,15 +57,18 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
           </div>
           <AlertDialogDescription className="text-left">
             {description}
-            {itemName && (
+          </AlertDialogDescription>
+
+          {itemName && (
               <div className="mt-2 p-2 bg-muted rounded text-sm font-medium">
                 {itemName}
               </div>
-            )}
-            <div className="mt-3 text-sm text-red-600">
-              ⚠️ Cette action est irréversible.
-            </div>
-          </AlertDialogDescription>
+          )}
+
+          <div className="mt-3 text-sm text-red-600">
+            ⚠️ Cette action est irréversible.
+          </div>
+
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>Annuler</AlertDialogCancel>

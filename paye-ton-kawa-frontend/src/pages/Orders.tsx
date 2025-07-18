@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import PrivateRoute from '@/components/routing/PrivateRoute';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { DataTable } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
@@ -66,14 +67,8 @@ const Orders: React.FC = () => {
   });
 
   const columns = [
-    {
-      key: 'orderNumber' as keyof Order,
-      header: 'N° Commande',
-    },
-    {
-      key: 'client' as keyof Order,
-      header: 'Client',
-    },
+    { key: 'orderNumber' as keyof Order, header: 'N° Commande' },
+    { key: 'client' as keyof Order, header: 'Client' },
     {
       key: 'total' as keyof Order,
       header: 'Total',
@@ -98,9 +93,9 @@ const Orders: React.FC = () => {
           cancelled: 'Annulée',
         };
         return (
-          <Badge variant={variants[value as keyof typeof variants]}>
-            {labels[value as keyof typeof labels]}
-          </Badge>
+            <Badge variant={variants[value as keyof typeof variants]}>
+              {labels[value as keyof typeof labels]}
+            </Badge>
         );
       },
     },
@@ -151,49 +146,51 @@ const Orders: React.FC = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight">Commandes</h2>
-            <p className="text-muted-foreground">
-              Gérez toutes vos commandes
-            </p>
+      <PrivateRoute>
+        <DashboardLayout>
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-3xl font-bold tracking-tight">Commandes</h2>
+                <p className="text-muted-foreground">
+                  Gérez toutes vos commandes
+                </p>
+              </div>
+            </div>
+
+            <DataTable
+                title="Liste des commandes"
+                data={orders}
+                columns={columns}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onAdd={handleAdd}
+            />
+
+            <AddOrderModal
+                open={isAddModalOpen}
+                onOpenChange={setIsAddModalOpen}
+                onSubmit={handleAddOrder}
+            />
+
+            <EditOrderModal
+                open={editModal.open}
+                onOpenChange={(open) => setEditModal({ open, order: null })}
+                order={editModal.order}
+                onSubmit={handleEditOrder}
+            />
+
+            <DeleteConfirmationModal
+                open={deleteModal.open}
+                onOpenChange={(open) => setDeleteModal({ open, order: null })}
+                onConfirm={confirmDelete}
+                title="Supprimer la commande"
+                description="Êtes-vous sûr de vouloir supprimer cette commande ? Cette action supprimera définitivement la commande et toutes ses données associées."
+                itemName={deleteModal.order?.orderNumber}
+            />
           </div>
-        </div>
-
-        <DataTable
-          title="Liste des commandes"
-          data={orders}
-          columns={columns}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onAdd={handleAdd}
-        />
-
-        <AddOrderModal
-          open={isAddModalOpen}
-          onOpenChange={setIsAddModalOpen}
-          onSubmit={handleAddOrder}
-        />
-
-        <EditOrderModal
-          open={editModal.open}
-          onOpenChange={(open) => setEditModal({ open, order: null })}
-          order={editModal.order}
-          onSubmit={handleEditOrder}
-        />
-
-        <DeleteConfirmationModal
-          open={deleteModal.open}
-          onOpenChange={(open) => setDeleteModal({ open, order: null })}
-          onConfirm={confirmDelete}
-          title="Supprimer la commande"
-          description="Êtes-vous sûr de vouloir supprimer cette commande ? Cette action supprimera définitivement la commande et toutes ses données associées."
-          itemName={deleteModal.order?.orderNumber}
-        />
-      </div>
-    </DashboardLayout>
+        </DashboardLayout>
+      </PrivateRoute>
   );
 };
 
