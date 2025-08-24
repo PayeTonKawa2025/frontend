@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,148 +10,180 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
+import { api } from '@/lib/api';
+import { Product } from '@/types/Product';
+import { Order, OrderItem, toApiOrder, calcOrderTotal } from '@/types/Order';
+
+interface Client {
+  id: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
+}
 
 interface AddOrderModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (order: any) => void;
+  onCreated: () => void;
 }
 
-export const AddOrderModal: React.FC<AddOrderModalProps> = ({
-  open,
-  onOpenChange,
-  onSubmit,
-}) => {
-  const [formData, setFormData] = useState({
-    client: '',
-    total: '',
-    status: 'pending',
-  });
-
+export const AddOrderModal: React.FC<AddOrderModalProps> = ({ open, onOpenChange, onCreated }) => {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [clientId, setClientId] = useState('');
+  const [items, setItems] = useState<OrderItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchClients = async () => {
+    try {
+      const res = await api.get<Client[]>('/clients');
+      setClients(res.data);
+    } catch {
+      toast({ title: 'Erreur', description: 'Impossible de charger les clients', variant: 'destructive' });
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const res = await api.get<Product[]>('/products');
+      setProducts(res.data);
+    } catch {
+      toast({ title: 'Erreur', description: 'Impossible de charger les produits', variant: 'destructive' });
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      fetchClients();
+      fetchProducts();
+    }
+  }, [open]);
+
+  const addItem = () => {
+    setItems(prev => [...prev, { productId: 0, quantity: 1, unitPrice: 0 }]);
+  };
+
+  const updateItem = (index: number, field: keyof OrderItem, value: any) => {
+    setItems(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+
+      if (field === 'productId') {
+        const product = products.find(p => p.id === Number(value));
+        if (product) {
+          updated[index].unitPrice = product.price;
+        }
+      }
+      return updated;
+    });
+  };
+
+  const removeItem = (index: number) => {
+    setItems(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!clientId || items.length === 0) {
+      toast({ title: 'Erreur', description: 'Veuillez sélectionner un client et au moins un produit', variant: 'destructive' });
+      return;
+    }
     setIsSubmitting(true);
 
-    const orderNumber = `ORD-${String(Date.now()).slice(-6)}`;
-    
-    const newOrder = {
-      id: Date.now().toString(),
-      orderNumber,
-      client: formData.client,
-      total: parseFloat(formData.total),
-      status: formData.status as 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled',
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-
-    // Simulation d'un appel API
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    onSubmit(newOrder);
-    setIsSubmitting(false);
-    
-    // Reset form
-    setFormData({
-      client: '',
-      total: '',
-      status: 'pending',
-    });
-    
-    onOpenChange(false);
+    const order: Order = { clientId, items };
+    try {
+      await api.post('/orders', toApiOrder(order));
+      toast({ title: 'Commande créée' });
+      onCreated();
+      onOpenChange(false);
+    } catch {
+      toast({ title: 'Erreur', description: 'Création échouée', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const mockClients = [
-    'Jean Dupont',
-    'Marie Martin',
-    'Pierre Durand',
-    'Sophie Leblanc',
-    'Michel Bernard',
-  ];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[525px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <span>Créer une nouvelle commande</span>
-            <Badge variant="outline">Nouveau</Badge>
-          </DialogTitle>
-          <DialogDescription>
-            Remplissez les informations ci-dessous pour créer une nouvelle commande.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="client">Client</Label>
-            <Select value={formData.client} onValueChange={(value) => handleInputChange('client', value)} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionner un client" />
-              </SelectTrigger>
-              <SelectContent>
-                {mockClients.map((client) => (
-                  <SelectItem key={client} value={client}>
-                    {client}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle>Nouvelle commande</DialogTitle>
+            <DialogDescription>Créez une commande avec un client et plusieurs produits.</DialogDescription>
+          </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Sélection client */}
             <div className="space-y-2">
-              <Label htmlFor="total">Montant total (€)</Label>
-              <Input
-                id="total"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={formData.total}
-                onChange={(e) => handleInputChange('total', e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="status">Statut initial</Label>
-              <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
+              <Label>Client</Label>
+              <Select value={clientId} onValueChange={setClientId}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Sélectionner un client" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="processing">En cours</SelectItem>
-                  <SelectItem value="shipped">Expédiée</SelectItem>
-                  <SelectItem value="delivered">Livrée</SelectItem>
+                  {clients.map(c => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.name || `${c.firstName} ${c.lastName}` || c.companyName}
+                      </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          <div className="p-4 bg-muted rounded-lg">
-            <p className="text-sm text-muted-foreground">
-              Un numéro de commande sera automatiquement généré après la création.
-            </p>
-          </div>
+            {/* Produits */}
+            <div className="space-y-3">
+              {items.map((item, idx) => (
+                  <div key={idx} className="grid grid-cols-4 gap-3 items-end">
+                    <Select
+                        value={item.productId ? String(item.productId) : ''}
+                        onValueChange={(v) => updateItem(idx, 'productId', Number(v))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Produit" /></SelectTrigger>
+                      <SelectContent>
+                        {products.map(p => (
+                            <SelectItem key={p.id} value={String(p.id)}>
+                              {p.name} (€{p.price})
+                            </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Création en cours...' : 'Créer la commande'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+                    <Input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(idx, 'quantity', Number(e.target.value))}
+                    />
+
+                    <Input
+                        type="number"
+                        step="0.01"
+                        value={item.unitPrice}
+                        onChange={(e) => updateItem(idx, 'unitPrice', Number(e.target.value))}
+                    />
+
+                    <Button type="button" variant="destructive" onClick={() => removeItem(idx)}>Supprimer</Button>
+                  </div>
+              ))}
+              <Button type="button" variant="outline" onClick={addItem}>Ajouter un produit</Button>
+            </div>
+
+            {/* Total */}
+            <div className="p-4 bg-muted rounded-lg font-semibold">
+              Total : €{calcOrderTotal({ clientId, items }).toFixed(2)}
+            </div>
+
+            <DialogFooter>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Création...' : 'Créer la commande'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
   );
 };

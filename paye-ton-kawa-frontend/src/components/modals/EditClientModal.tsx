@@ -1,180 +1,128 @@
-
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Edit } from 'lucide-react';
-
-interface Client {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  company: string;
-  status: 'active' | 'inactive' | 'prospect';
-  totalOrders: number;
-  createdAt: string;
-}
+import { Client } from '@/types/client';
 
 interface EditClientModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   client: Client | null;
-  onSubmit: (client: Client) => void;
+  onSubmit: (id: number, payload: Partial<Client>) => Promise<void>; // PATCH
 }
 
 export const EditClientModal: React.FC<EditClientModalProps> = ({
-  open,
-  onOpenChange,
-  client,
-  onSubmit,
-}) => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    company: '',
-    status: 'active' as 'active' | 'inactive' | 'prospect',
-  });
-  const [isLoading, setIsLoading] = useState(false);
+                                                                  open,
+                                                                  onOpenChange,
+                                                                  client,
+                                                                  onSubmit,
+                                                                }) => {
+  const [form, setForm] = useState<Partial<Client>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (client) {
-      setFormData({
+      setForm({
         name: client.name,
-        email: client.email,
-        phone: client.phone,
-        company: client.company,
-        status: client.status,
+        username: client.username,
+        firstName: client.firstName,
+        lastName: client.lastName,
+        profileFirstName: client.profileFirstName,
+        profileLastName: client.profileLastName,
+        postalCode: client.postalCode,
+        city: client.city,
+        companyName: client.companyName,
       });
     }
   }, [client]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  if (!client) return null;
+
+  const handle = (k: keyof Client, v: string) =>
+      setForm((p) => ({ ...p, [k]: v }));
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!client) return;
-
-    setIsLoading(true);
-    
-    const updatedClient: Client = {
-      ...client,
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      company: formData.company,
-      status: formData.status,
-    };
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    onSubmit(updatedClient);
-    setIsLoading(false);
+    setIsSubmitting(true);
+    await onSubmit(client.id, form);
+    setIsSubmitting(false);
     onOpenChange(false);
   };
 
-  if (!client) return null;
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <div className="flex items-center space-x-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-              <Edit className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <DialogTitle>Modifier le client</DialogTitle>
-              <DialogDescription>
-                Modifiez les informations du client.
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[640px]">
+          <DialogHeader>
+            <DialogTitle>Modifier le client</DialogTitle>
+            <DialogDescription>Modifiez les informations nécessaires.</DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nom complet *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
+          <form onSubmit={submit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Nom complet</Label>
+                <Input value={form.name ?? ''} onChange={(e) => handle('name', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Username</Label>
+                <Input value={form.username ?? ''} onChange={(e) => handle('username', e.target.value)} />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="phone">Téléphone *</Label>
-              <Input
-                id="phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                required
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Prénom</Label>
+                <Input value={form.firstName ?? ''} onChange={(e) => handle('firstName', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Nom</Label>
+                <Input value={form.lastName ?? ''} onChange={(e) => handle('lastName', e.target.value)} />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="company">Entreprise *</Label>
-              <Input
-                id="company"
-                value={formData.company}
-                onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                required
-              />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Prénom (profil)</Label>
+                <Input value={form.profileFirstName ?? ''} onChange={(e) => handle('profileFirstName', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Nom (profil)</Label>
+                <Input value={form.profileLastName ?? ''} onChange={(e) => handle('profileLastName', e.target.value)} />
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="status">Statut</Label>
-            <Select value={formData.status} onValueChange={(value: 'active' | 'inactive' | 'prospect') => setFormData({ ...formData, status: value })}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Actif</SelectItem>
-                <SelectItem value="inactive">Inactif</SelectItem>
-                <SelectItem value="prospect">Prospect</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Code postal</Label>
+                <Input value={form.postalCode ?? ''} onChange={(e) => handle('postalCode', e.target.value)} />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label>Ville</Label>
+                <Input value={form.city ?? ''} onChange={(e) => handle('city', e.target.value)} />
+              </div>
+            </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-              Annuler
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Modification...' : 'Modifier'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <div className="space-y-2">
+              <Label>Entreprise</Label>
+              <Input value={form.companyName ?? ''} onChange={(e) => handle('companyName', e.target.value)} />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Modification…' : 'Modifier'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
   );
 };

@@ -2,8 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +22,7 @@ interface EditUserModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   user: User | null;
-  onSubmit: () => void;  // déclenche fetchUsers côté parent
+  onSubmit: () => void;
 }
 
 export const EditUserModal: React.FC<EditUserModalProps> = ({
@@ -31,7 +35,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     firstName: '',
     lastName: '',
     email: '',
-    role: 'user',
+    role: 'user',      // Valeurs en minuscules ici
     status: 'active',
   });
 
@@ -40,11 +44,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   useEffect(() => {
     if (user) {
       setFormData({
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        status: user.status,
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        role: Array.isArray(user.roles) && user.roles.length > 0
+            ? user.roles[0]?.name.toLowerCase()
+            : 'user',
+        status: user.status?.toLowerCase() || 'inactive',
       });
     }
   }, [user]);
@@ -58,18 +64,24 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     if (!user) return;
     setIsSubmitting(true);
 
+    const payload = {
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      email: formData.email,
+      role: formData.role.toUpperCase(),       // "ADMIN"
+      status: formData.status.toUpperCase(),   // "ACTIVE"
+    };
+
+    console.log('📤 Payload envoyé au backend :', payload);
+
     try {
-      await authApi.put(`/users/${user.id}`, {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
+      await authApi.put(`/users/${user.id}`, payload);
 
-      });
-
-      toast({ title: "Utilisateur mis à jour." });
+      toast({ title: 'Utilisateur mis à jour.' });
       onSubmit();
       onOpenChange(false);
-    } catch {
+    } catch (err) {
+      console.error('❌ Erreur lors de la requête PUT /users/:id', err);
       toast({
         title: "Erreur",
         description: "Impossible de modifier l'utilisateur.",
@@ -79,6 +91,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       setIsSubmitting(false);
     }
   };
+
 
   if (!user) return null;
 
@@ -127,7 +140,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Rôle</Label>
-                <Select value={formData.role} onValueChange={(value) => handleInputChange('role', value)}>
+                <Select
+                    value={formData.role}
+                    onValueChange={(value) => handleInputChange('role', value)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -138,9 +154,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-2">
                 <Label>Statut</Label>
-                <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
+                <Select
+                    value={formData.status}
+                    onValueChange={(value) => handleInputChange('status', value)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
