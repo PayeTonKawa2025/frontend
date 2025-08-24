@@ -1,14 +1,18 @@
-// src/types/User.ts
+export interface Role {
+    id: number;
+    name: string;
+}
 
 export interface User {
-    avatar: string | undefined;
-    id: string;
+    id: number;
     email: string;
     firstName: string;
     lastName: string;
-    password: string;
-    role: 'admin' | 'manager' | 'user';
-    status: 'active' | 'inactive';
-    lastLogin: string;
-    createdAt: string;
+    password?: string;
+    status?: 'active' | 'inactive';
+    lastLogin?: string;
+    createdAt?: string;
+
+    // ❗Depuis /users → objets Role[]
+    roles: string[]; // string[] depuis /me, Role[] depuis /users
 }

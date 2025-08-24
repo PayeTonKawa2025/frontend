@@ -1,284 +1,284 @@
+// src/hooks/useDashboardData.ts
+'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '@/lib/api';
+import type { Product } from '@/types/Product';
+import type { ApiOrder, Order } from '@/types/Order';
+import { fromApiOrder } from '@/types/Order';
 
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-  stock: number;
-  status: 'active' | 'inactive';
-  createdAt: string;
+export interface Client {
+  id: string | number;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
+  createdAt?: string | number;
 }
 
-interface Order {
-  id: string;
-  orderNumber: string;
-  client: string;
-  total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  createdAt: string;
+export interface User {
+  id: string | number;
+  name?: string;
+  email?: string;
+  role?: 'admin' | 'manager' | 'user';
+  status?: 'active' | 'inactive';
+  lastLogin?: string;
+  createdAt?: string | number;
 }
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'manager' | 'user';
-  status: 'active' | 'inactive';
-  lastLogin: string;
-  createdAt: string;
-}
+/* ---------- Helpers ---------- */
 
-interface Client {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  company: string;
-  status: 'active' | 'inactive';
-  createdAt: string;
-}
+const toArray = <T,>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : []);
 
-const mockProducts: Product[] = [
-  {
-    id: '1',
-    name: 'Ordinateur Portable Pro',
-    category: 'Informatique',
-    price: 1299.99,
-    stock: 45,
-    status: 'active',
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Smartphone Elite',
-    category: 'Téléphonie',
-    price: 899.99,
-    stock: 23,
-    status: 'active',
-    createdAt: '2024-01-14',
-  },
-  {
-    id: '3',
-    name: 'Tablette Design',
-    category: 'Informatique',
-    price: 599.99,
-    stock: 0,
-    status: 'inactive',
-    createdAt: '2024-01-10',
-  },
-  {
-    id: '4',
-    name: 'Écouteurs Premium',
-    category: 'Audio',
-    price: 299.99,
-    stock: 78,
-    status: 'active',
-    createdAt: '2024-01-08',
-  },
-];
+const calcOrderTotal = (o: Order): number =>
+    (o.items || []).reduce((acc, it) => acc + (it.unitPrice || 0) * (it.quantity || 0), 0);
 
-const mockOrders: Order[] = [
-  {
-    id: '1',
-    orderNumber: 'ORD-001234',
-    client: 'Jean Dupont',
-    total: 1299.99,
-    status: 'delivered',
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    orderNumber: 'ORD-001235',
-    client: 'Marie Martin',
-    total: 899.99,
-    status: 'shipped',
-    createdAt: '2024-01-14',
-  },
-  {
-    id: '3',
-    orderNumber: 'ORD-001236',
-    client: 'Pierre Durand',
-    total: 599.99,
-    status: 'processing',
-    createdAt: '2024-01-13',
-  },
-  {
-    id: '4',
-    orderNumber: 'ORD-001237',
-    client: 'Sophie Leblanc',
-    total: 1899.99,
-    status: 'pending',
-    createdAt: '2024-01-12',
-  },
-  {
-    id: '5',
-    orderNumber: 'ORD-001238',
-    client: 'Michel Bernard',
-    total: 750.50,
-    status: 'delivered',
-    createdAt: '2024-01-11',
-  },
-];
+const minutesAgo = (ts?: string | number) => {
+  if (!ts) return '—';
+  const d = new Date(typeof ts === 'number' ? ts : Date.parse(ts));
+  const diffMin = Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
+  return `Il y a ${diffMin} min`;
+};
 
-const mockUsers: User[] = [
-  {
-    id: '1',
-    name: 'Administrateur',
-    email: 'admin@crm.com',
-    role: 'admin',
-    status: 'active',
-    lastLogin: '2024-01-15T10:30:00Z',
-    createdAt: '2024-01-01',
-  },
-  {
-    id: '2',
-    name: 'Manager Commercial',
-    email: 'manager@crm.com',
-    role: 'manager',
-    status: 'active',
-    lastLogin: '2024-01-14T14:20:00Z',
-    createdAt: '2024-01-05',
-  },
-  {
-    id: '3',
-    name: 'Utilisateur Test',
-    email: 'user@crm.com',
-    role: 'user',
-    status: 'inactive',
-    lastLogin: '2024-01-10T09:15:00Z',
-    createdAt: '2024-01-10',
-  },
-];
+const monthLabelFR = (year: number, monthIndex0: number) =>
+    new Intl.DateTimeFormat('fr-FR', { month: 'short' }).format(new Date(year, monthIndex0, 1));
 
-const mockClients: Client[] = [
-  {
-    id: '1',
-    name: 'Jean Dupont',
-    email: 'jean.dupont@email.com',
-    phone: '+33 1 23 45 67 89',
-    company: 'Tech Solutions',
-    status: 'active',
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Marie Martin',
-    email: 'marie.martin@email.com',
-    phone: '+33 1 23 45 67 90',
-    company: 'Digital Corp',
-    status: 'active',
-    createdAt: '2024-01-14',
-  },
-  {
-    id: '3',
-    name: 'Pierre Durand',
-    email: 'pierre.durand@email.com',
-    phone: '+33 1 23 45 67 91',
-    company: 'Innovation Ltd',
-    status: 'active',
-    createdAt: '2024-01-13',
-  },
-  {
-    id: '4',
-    name: 'Sophie Leblanc',
-    email: 'sophie.leblanc@email.com',
-    phone: '+33 1 23 45 67 92',
-    company: 'Creative Agency',
-    status: 'inactive',
-    createdAt: '2024-01-12',
-  },
-];
+/** Donne la liste des mois de janvier -> mois courant (année courante) */
+const getMonthsFromJanToCurrent = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const lastMonthIdx = now.getMonth(); // 0..11
+  const months: { key: string; label: string; year: number; monthIdx: number }[] = [];
+  for (let m = 0; m <= lastMonthIdx; m++) {
+    const key = `${year}-${String(m + 1).padStart(2, '0')}`;
+    months.push({ key, label: monthLabelFR(year, m), year, monthIdx: m });
+  }
+  return months;
+};
+
+/* ---------- Hook ---------- */
 
 export const useDashboardData = () => {
-  const [products] = useState<Product[]>(mockProducts);
-  const [orders] = useState<Order[]>(mockOrders);
-  const [users] = useState<User[]>(mockUsers);
-  const [clients] = useState<Client[]>(mockClients);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // 1) produits / clients / users
+        const [prodRes, clientsRes, usersRes] = await Promise.all([
+          api.get<Product[]>('/products').catch(() => ({ data: [] as Product[] })),
+          api.get<Client[]>('/clients').catch(() => ({ data: [] as Client[] })),
+          api.get<User[]>('/auth/users').catch(() => ({ data: [] as User[] })),
+        ]);
+
+        if (cancelled) return;
+
+        const productsList = toArray<Product>(prodRes.data);
+        const clientsList = toArray<Client>(clientsRes.data);
+        const usersList = toArray<User>(usersRes.data);
+
+        setProducts(productsList);
+        setClients(clientsList);
+        setUsers(usersList);
+
+        // 2) commandes : /orders (global) sinon fallback /orders/{clientId}
+        let apiOrders: ApiOrder[] = [];
+        try {
+          const allOrdersRes = await api.get<ApiOrder[]>('/orders');
+          apiOrders = toArray<ApiOrder>(allOrdersRes.data);
+        } catch {
+          const perClient = await Promise.all(
+              clientsList.map((c) =>
+                  api
+                      .get<ApiOrder[]>(`/orders/${c.id}`)
+                      .then((r) => toArray<ApiOrder>(r.data))
+                      .catch(() => [] as ApiOrder[])
+              )
+          );
+          apiOrders = perClient.flat();
+        }
+
+        if (cancelled) return;
+
+        setOrders(apiOrders.map(fromApiOrder));
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? 'Erreur de chargement');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const dashboardStats = useMemo(() => {
-    // Calcul du revenu total
-    const totalRevenue = orders
-      .filter(order => order.status === 'delivered')
-      .reduce((sum, order) => sum + order.total, 0);
-
-    // Calcul du nombre de commandes
+    /* Totaux simples */
+    const totalRevenue = orders.reduce((sum, o) => sum + calcOrderTotal(o), 0);
     const totalOrders = orders.length;
+    const activeClients = clients.length;
+    const productsInStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
 
-    // Calcul des clients actifs
-    const activeClients = clients.filter(client => client.status === 'active').length;
-
-    // Calcul des produits en stock
-    const productsInStock = products.reduce((sum, product) => sum + product.stock, 0);
-
-    // Données pour les graphiques
-    const salesData = [
-      { name: 'Jan', ventes: 4000, commandes: 24, profit: 2400 },
-      { name: 'Fév', ventes: 3000, commandes: 18, profit: 1800 },
-      { name: 'Mar', ventes: 5000, commandes: 32, profit: 3200 },
-      { name: 'Avr', ventes: 4500, commandes: 28, profit: 2800 },
-      { name: 'Mai', ventes: 6000, commandes: 38, profit: 3800 },
-      { name: 'Jun', ventes: totalRevenue, commandes: totalOrders, profit: totalRevenue * 0.6 },
-    ];
-
-    const revenueData = [
-      { name: 'Jan', revenue: 12000 },
-      { name: 'Fév', revenue: 15000 },
-      { name: 'Mar', revenue: 18000 },
-      { name: 'Avr', revenue: 16000 },
-      { name: 'Mai', revenue: 22000 },
-      { name: 'Jun', revenue: totalRevenue },
-    ];
+    /* ---------- Répartition produits par TRANCHES DE STOCK ---------- */
+    let rupture = 0; // stock = 0
+    let faible = 0;  // 1..10
+    let moyen = 0;   // 11..50
+    let eleve = 0;   // 51+
+    products.forEach((p) => {
+      const s = Number(p.stock) || 0;
+      if (s <= 0) rupture++;
+      else if (s <= 10) faible++;
+      else if (s <= 50) moyen++;
+      else eleve++;
+    });
 
     const productData = [
-      { name: 'Informatique', value: products.filter(p => p.category === 'Informatique').length * 100, color: '#3b82f6' },
-      { name: 'Téléphonie', value: products.filter(p => p.category === 'Téléphonie').length * 100, color: '#10b981' },
-      { name: 'Audio', value: products.filter(p => p.category === 'Audio').length * 100, color: '#f59e0b' },
-      { name: 'Autres', value: 100, color: '#ef4444' },
+      { name: 'Rupture (0)', value: rupture, color: '#ef4444' },
+      { name: 'Faible (1–10)', value: faible, color: '#f59e0b' },
+      { name: 'Moyen (11–50)', value: moyen, color: '#10b981' },
+      { name: 'Élevé (51+)', value: eleve, color: '#3b82f6' },
     ];
 
-    // Commandes récentes
-    const recentOrders = orders
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 4)
-      .map(order => ({
-        id: order.orderNumber,
-        client: order.client,
-        amount: order.total,
-        status: order.status,
-        time: `Il y a ${Math.floor(Math.random() * 60)} min`,
-      }));
+    /* ---------- Graphiques mensuels dynamiques (Jan → mois courant) ---------- */
+    const months = getMonthsFromJanToCurrent(); // clés 2025-01, 2025-02, ..., 2025-08
+    const revenueByKey: Record<string, number> = {};
+    const countByKey: Record<string, number> = {};
 
-    // Produits les plus vendus (simulation basée sur les produits existants)
-    const topProducts = products
-      .filter(p => p.status === 'active')
-      .map(product => ({
-        name: product.name,
-        sales: Math.floor(Math.random() * 200) + 50,
-        revenue: Math.floor(Math.random() * 100000) + 20000,
-      }))
-      .sort((a, b) => b.sales - a.sales)
-      .slice(0, 4);
+    months.forEach((m) => {
+      revenueByKey[m.key] = 0;
+      countByKey[m.key] = 0;
+    });
+
+    // On ne remplit que pour l’année courante (simple et lisible)
+    const currentYear = new Date().getFullYear();
+    orders.forEach((o) => {
+      const d = new Date(Number(o.createdAt || Date.now()));
+      if (d.getFullYear() !== currentYear) return;
+      const key = `${currentYear}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (key in revenueByKey) {
+        revenueByKey[key] += calcOrderTotal(o);
+        countByKey[key] += 1;
+      }
+    });
+
+    const salesData = months.map((m) => ({
+      name: m.label,                             // 'janv.', 'févr.', ...
+      ventes: Math.round(revenueByKey[m.key]),   // on affiche le CA en "ventes"
+      commandes: countByKey[m.key],
+      profit: Math.round(revenueByKey[m.key] * 0.6),
+    }));
+
+    const revenueData = months.map((m) => ({
+      name: m.label,
+      revenue: Math.round(revenueByKey[m.key]),
+    }));
+
+    /* ---------- Commandes récentes ---------- */
+    const recentOrders = [...orders]
+        .sort((a, b) => (Number(b.createdAt || 0) - Number(a.createdAt || 0)))
+        .slice(0, 4)
+        .map((o) => ({
+          id: String(o.id ?? ''),
+          client: o.clientId ?? '',
+          amount: Math.round(calcOrderTotal(o) * 100) / 100,
+          status: 'delivered', // pas de statut back → on met un badge "Livrée"
+          time: minutesAgo(o.createdAt),
+        }));
+
+    /* ---------- Top produits (à partir des commandes) ---------- */
+    const qtyByProduct: Record<number, number> = {};
+    const revenueByProduct: Record<number, number> = {};
+    orders.forEach((o) =>
+        (o.items || []).forEach((it) => {
+          const pid = Number(it.productId);
+          const q = Number(it.quantity || 0);
+          const rev = (it.unitPrice || 0) * q;
+          if (!Number.isFinite(pid)) return;
+          qtyByProduct[pid] = (qtyByProduct[pid] || 0) + q;
+          revenueByProduct[pid] = (revenueByProduct[pid] || 0) + rev;
+        })
+    );
+    const productById = new Map(products.map((p) => [Number(p.id), p]));
+    const topProducts = Object.keys(qtyByProduct)
+        .map((idStr) => {
+          const id = Number(idStr);
+          const p = productById.get(id);
+          return {
+            name: p?.name ?? `Produit #${id}`,
+            sales: qtyByProduct[id],
+            revenue: Math.round((revenueByProduct[id] || 0) * 100) / 100,
+          };
+        })
+        .sort((a, b) => b.sales - a.sales)
+        .slice(0, 4);
 
     return {
       totalRevenue,
       totalOrders,
       activeClients,
       productsInStock,
-      salesData,
-      revenueData,
-      productData,
+      salesData,     // BarChart (ventes / commandes / profit)
+      revenueData,   // AreaChart (revenue)
+      productData,   // PieChart (tranches de stock)
       recentOrders,
       topProducts,
     };
-  }, [products, orders, users, clients]);
+  }, [orders, clients, products]);
+
+  const refresh = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [prodRes, clientsRes, usersRes] = await Promise.all([
+        api.get<Product[]>('/products').catch(() => ({ data: [] as Product[] })),
+        api.get<Client[]>('/clients').catch(() => ({ data: [] as Client[] })),
+        api.get<User[]>('/users').catch(() => ({ data: [] as User[] })),
+      ]);
+      setProducts(toArray<Product>(prodRes.data));
+      setClients(toArray<Client>(clientsRes.data));
+      setUsers(toArray<User>(usersRes.data));
+
+      let apiOrders: ApiOrder[] = [];
+      try {
+        const allOrdersRes = await api.get<ApiOrder[]>('/orders');
+        apiOrders = toArray<ApiOrder>(allOrdersRes.data);
+      } catch {
+        const perClient = await Promise.all(
+            toArray<Client>(clientsRes.data).map((c) =>
+                api.get<ApiOrder[]>(`/orders/${c.id}`).then((r) => toArray<ApiOrder>(r.data)).catch(() => [] as ApiOrder[])
+            )
+        );
+        apiOrders = perClient.flat();
+      }
+      setOrders(apiOrders.map(fromApiOrder));
+    } catch (e: any) {
+      setError(e?.message ?? 'Erreur de rechargement');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return {
     products,
-    orders,
-    users,
     clients,
+    users,
+    orders,
     dashboardStats,
+    loading,
+    error,
+    refresh,
   };
 };

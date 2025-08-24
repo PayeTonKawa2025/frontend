@@ -73,8 +73,9 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onToggleMode }) => {
           description: "Votre compte a été créé avec succès !",
         });
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+    } catch (err: any) {
+      const msg = err?.response?.data || (err instanceof Error ? err.message : 'Une erreur est survenue');
+      setError(msg);
     }
   };
 
