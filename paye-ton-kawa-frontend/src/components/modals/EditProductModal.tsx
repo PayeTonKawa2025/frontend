@@ -53,7 +53,7 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      await api.put(`/products/${product.id}`, formData);
+      await api.patch(`/products/${product.id}`, formData);
       toast({ title: 'Produit mis à jour.' });
       onSubmit();
       onOpenChange(false);

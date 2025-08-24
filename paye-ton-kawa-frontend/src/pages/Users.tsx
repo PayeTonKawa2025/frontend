@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import PrivateRoute from '@/components/routing/PrivateRoute';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +9,7 @@ import { EditUserModal } from '@/components/modals/EditUserModal';
 import { DeleteConfirmationModal } from '@/components/modals/DeleteConfirmationModal';
 import { toast } from '@/hooks/use-toast';
 import { User } from '@/types/user';
-import {authApi} from '@/lib/api';
+import { authApi } from '@/lib/api';
 
 const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -29,7 +28,16 @@ const Users: React.FC = () => {
     try {
       setIsLoading(true);
       const res = await authApi.get<User[]>('/users');
-      setUsers(res.data);
+
+      // Sécurité : garantir que user.roles est toujours un tableau
+      const safeUsers = res.data.map((user) => ({
+        ...user,
+        roles: Array.isArray(user.roles) ? user.roles : [],
+        status: user.status?.toLowerCase() ?? 'inactive',
+      }));
+
+      setUsers(safeUsers);
+      console.log('Utilisateurs récupérés:', safeUsers);
     } catch (error) {
       toast({
         title: 'Erreur',
@@ -45,46 +53,55 @@ const Users: React.FC = () => {
     fetchUsers();
   }, []);
 
-  const columns: ({ header: string; key: string } | { header: string; key: string } | {
-    header: string;
-    key: string
-  } | { header: string; render: (value: User["role"]) => React.JSX.Element; key: string } | {
-    header: string;
-    render: (value: User["status"]) => React.JSX.Element;
-    key: string
-  })[] = [
+  const columns: Column<User>[] = [
     { key: 'firstName', header: 'Prénom' },
     { key: 'lastName', header: 'Nom' },
     { key: 'email', header: 'Email' },
     {
-      key: 'role',
+      key: 'roles',
       header: 'Rôle',
-      render: (value: User['role']) => {
+      render: (roles: User['roles']) => {
         const variants = {
-          admin: 'destructive',
-          manager: 'default',
-          user: 'secondary',
+          ADMIN: 'destructive',
+          MANAGER: 'default',
+          USER: 'secondary',
         } as const;
 
-        const labels = {
-          admin: 'Administrateur',
-          manager: 'Manager',
-          user: 'Utilisateur',
-        };
+        if (!Array.isArray(roles) || roles.length === 0) {
+          return <Badge variant="secondary">Inconnu</Badge>;
+        }
 
         return (
-            <Badge variant={variants[value]}>
-              {labels[value]}
-            </Badge>
+            <>
+              {roles.map((role: any, index: number) => {
+                const name = typeof role === 'string' ? role : role?.name;
+
+                if (!name) {
+                  return (
+                      <Badge key={index} variant="secondary" className="mr-1">
+                        Inconnu
+                      </Badge>
+                  );
+                }
+
+                const variant = variants[name as keyof typeof variants] ?? 'secondary';
+
+                return (
+                    <Badge key={index} variant={variant} className="mr-1">
+                      {name}
+                    </Badge>
+                );
+              })}
+            </>
         );
       },
     },
     {
       key: 'status',
       header: 'Statut',
-      render: (value: User['status']) => (
-          <Badge variant={value === 'active' ? 'default' : 'secondary'}>
-            {value === 'active' ? 'Actif' : 'Inactif'}
+      render: (status: User['status']) => (
+          <Badge variant={status === 'active' ? 'default' : 'secondary'}>
+            {status === 'active' ? 'Actif' : 'Inactif'}
           </Badge>
       ),
     },
@@ -99,56 +116,52 @@ const Users: React.FC = () => {
   };
 
   return (
-      <PrivateRoute>
-        <DashboardLayout>
-          <DataTable
-              title="Liste des utilisateurs"
-              data={users}
-              columns={columns}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onAdd={() => setIsAddModalOpen(true)}
-              isLoading={isLoading}
-          />
+      <DashboardLayout>
+        <DataTable
+            title="Liste des utilisateurs"
+            data={users}
+            columns={columns}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onAdd={() => setIsAddModalOpen(true)}
+            isLoading={isLoading}
+        />
 
+        <AddUserModal
+            open={isAddModalOpen}
+            onOpenChange={setIsAddModalOpen}
+            onSubmit={fetchUsers}
+        />
 
-          <AddUserModal
-              open={isAddModalOpen}
-              onOpenChange={setIsAddModalOpen}
-              onSubmit={() => fetchUsers()} // Rafraîchit après ajout
-          />
+        <EditUserModal
+            open={editModal.open}
+            onOpenChange={(open) => setEditModal({ open, user: null })}
+            user={editModal.user}
+            onSubmit={fetchUsers}
+        />
 
-          <EditUserModal
-              open={editModal.open}
-              onOpenChange={(open) => setEditModal({ open, user: null })}
-              user={editModal.user}
-              onSubmit={() => fetchUsers()} // Rafraîchit après édition
-          />
-
-          <DeleteConfirmationModal
-              open={deleteModal.open}
-              onOpenChange={(open) => setDeleteModal({ open, user: null })}
-              onConfirm={async () => {
-                if (!deleteModal.user) return;
-                try {
-                  await authApi.delete(`/users/${deleteModal.user.id}`);
-                  toast({ title: "Utilisateur supprimé." });
-                  fetchUsers();  // Rafraîchit la liste après suppression
-                } catch {
-                  toast({
-                    title: "Erreur",
-                    description: "La suppression a échoué.",
-                    variant: "destructive",
-                  });
-                }
-              }}
-              title="Supprimer l'utilisateur"
-              description="Cette action supprimera définitivement l'utilisateur."
-              itemName={deleteModal.user?.firstName}
-          />
-
-        </DashboardLayout>
-      </PrivateRoute>
+        <DeleteConfirmationModal
+            open={deleteModal.open}
+            onOpenChange={(open) => setDeleteModal({ open, user: null })}
+            onConfirm={async () => {
+              if (!deleteModal.user) return;
+              try {
+                await authApi.delete(`/users/${deleteModal.user.id}`);
+                toast({ title: 'Utilisateur supprimé.' });
+                fetchUsers();
+              } catch {
+                toast({
+                  title: 'Erreur',
+                  description: 'La suppression a échoué.',
+                  variant: 'destructive',
+                });
+              }
+            }}
+            title="Supprimer l'utilisateur"
+            description="Cette action supprimera définitivement l'utilisateur."
+            itemName={deleteModal.user?.firstName}
+        />
+      </DashboardLayout>
   );
 };
 

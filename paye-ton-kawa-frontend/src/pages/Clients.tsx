@@ -1,61 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
-import PrivateRoute from '@/components/routing/PrivateRoute';
+import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { DataTable } from '@/components/ui/data-table';
-import { Badge } from '@/components/ui/badge';
+import { DataTable, type Column } from '@/components/ui/data-table';
 import { AddClientModal } from '@/components/modals/AddClientModal';
 import { EditClientModal } from '@/components/modals/EditClientModal';
 import { DeleteConfirmationModal } from '@/components/modals/DeleteConfirmationModal';
 import { toast } from '@/hooks/use-toast';
-
-interface Client {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  company: string;
-  status: 'active' | 'inactive' | 'prospect';
-  totalOrders: number;
-  createdAt: string;
-}
-
-const mockClients: Client[] = [
-  {
-    id: '1',
-    name: 'Jean Dupont',
-    email: 'jean.dupont@email.com',
-    phone: '+33 1 23 45 67 89',
-    company: 'TechCorp',
-    status: 'active',
-    totalOrders: 12,
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Marie Martin',
-    email: 'marie.martin@email.com',
-    phone: '+33 1 98 76 54 32',
-    company: 'Design Studio',
-    status: 'active',
-    totalOrders: 8,
-    createdAt: '2024-01-14',
-  },
-  {
-    id: '3',
-    name: 'Pierre Durand',
-    email: 'pierre.durand@email.com',
-    phone: '+33 1 11 22 33 44',
-    company: 'Startup Inc',
-    status: 'prospect',
-    totalOrders: 0,
-    createdAt: '2024-01-10',
-  },
-];
+import { Client } from '@/types/client';
+import { api} from '@/lib/api';
 
 const Clients: React.FC = () => {
-  const [clients, setClients] = useState<Client[]>(mockClients);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editModal, setEditModal] = useState<{ open: boolean; client: Client | null }>({
     open: false,
@@ -66,120 +24,132 @@ const Clients: React.FC = () => {
     client: null,
   });
 
-  const columns = [
-    { key: 'name' as keyof Client, header: 'Nom' },
-    { key: 'email' as keyof Client, header: 'Email' },
-    { key: 'company' as keyof Client, header: 'Entreprise' },
-    { key: 'phone' as keyof Client, header: 'Téléphone' },
-    {
-      key: 'status' as keyof Client,
-      header: 'Statut',
-      render: (value: string) => {
-        const variants = {
-          active: 'default' as const,
-          inactive: 'secondary' as const,
-          prospect: 'outline' as const,
-        };
-        const labels = {
-          active: 'Actif',
-          inactive: 'Inactif',
-          prospect: 'Prospect',
-        };
-        return (
-            <Badge variant={variants[value as keyof typeof variants]}>
-              {labels[value as keyof typeof labels]}
-            </Badge>
-        );
-      },
-    },
-    { key: 'totalOrders' as keyof Client, header: 'Commandes' },
+  const fetchClients = async () => {
+    try {
+      setIsLoading(true);
+      const res = await api.get<Client[]>('/clients');
+      console.log('Clients fetched:', res.data);
+      setClients(res.data);
+    } catch (e) {
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de récupérer les clients.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
+  const columns: Column<Client>[] = [
+    { key: 'name', header: 'Nom complet' },
+    { key: 'username', header: 'Username' },
+    { key: 'firstName', header: 'Prénom' },
+    { key: 'lastName', header: 'Nom' },
+    { key: 'profileFirstName', header: 'Prénom (profil)' },
+    { key: 'profileLastName', header: 'Nom (profil)' },
+    { key: 'postalCode', header: 'Code postal' },
+    { key: 'city', header: 'Ville' },
+    { key: 'companyName', header: 'Entreprise' },
   ];
+
+  const handleAdd = () => setIsAddModalOpen(true);
 
   const handleEdit = (client: Client) => {
     setEditModal({ open: true, client });
-  };
-
-  const handleEditClient = (updatedClient: Client) => {
-    setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
-    toast({
-      title: 'Client modifié',
-      description: `${updatedClient.name} a été modifié avec succès.`,
-    });
   };
 
   const handleDelete = (client: Client) => {
     setDeleteModal({ open: true, client });
   };
 
-  const confirmDelete = () => {
-    if (deleteModal.client) {
-      setClients(prev => prev.filter(c => c.id !== deleteModal.client!.id));
-      toast({
-        title: 'Client supprimé',
-        description: `${deleteModal.client.name} a été supprimé avec succès.`,
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleAdd = () => {
-    setIsAddModalOpen(true);
-  };
-
-  const handleAddClient = (newClient: Client) => {
-    setClients(prev => [...prev, newClient]);
-    toast({
-      title: 'Client ajouté',
-      description: `${newClient.name} a été ajouté avec succès.`,
-    });
-  };
-
   return (
-      <PrivateRoute>
-        <DashboardLayout>
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-3xl font-bold tracking-tight">Clients</h2>
-                <p className="text-muted-foreground">
-                  Gérez votre base de clients
-                </p>
-              </div>
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">Clients</h2>
+              <p className="text-muted-foreground">Gérez votre base de clients</p>
             </div>
-
-            <DataTable
-                title="Liste des clients"
-                data={clients}
-                columns={columns}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onAdd={handleAdd}
-            />
-
-            <AddClientModal
-                open={isAddModalOpen}
-                onOpenChange={setIsAddModalOpen}
-                onSubmit={handleAddClient}
-            />
-
-            <EditClientModal
-                open={editModal.open}
-                onOpenChange={(open) => setEditModal({ open, client: null })}
-                client={editModal.client}
-                onSubmit={handleEditClient}
-            />
-
-            <DeleteConfirmationModal
-                open={deleteModal.open}
-                onOpenChange={(open) => setDeleteModal({ open, client: null })}
-                onConfirm={confirmDelete}
-                title="Supprimer le client"
-                description="Êtes-vous sûr de vouloir supprimer ce client ? Cette action supprimera définitivement le client et toutes ses données associées."
-                itemName={deleteModal.client?.name}
-            />
           </div>
-        </DashboardLayout>
-      </PrivateRoute>
+
+          <DataTable
+              title="Liste des clients"
+              data={clients}
+              columns={columns}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onAdd={handleAdd}
+              isLoading={isLoading}
+          />
+
+          {/* Ajout */}
+          <AddClientModal
+              open={isAddModalOpen}
+              onOpenChange={setIsAddModalOpen}
+              onSubmit={async (payload) => {
+                try {
+                  await api.post('/clients', payload);
+                  toast({ title: 'Client ajouté' });
+                  fetchClients();
+                } catch {
+                  toast({
+                    title: 'Erreur',
+                    description: "Impossible d'ajouter le client.",
+                    variant: 'destructive',
+                  });
+                }
+              }}
+          />
+
+          {/* Edition */}
+          <EditClientModal
+              open={editModal.open}
+              onOpenChange={(open) => setEditModal({ open, client: null })}
+              client={editModal.client}
+              onSubmit={async (id, payload) => {
+                try {
+                  await api.patch(`/clients/${id}`, payload);
+                  toast({ title: 'Client modifié' });
+                  fetchClients();
+                } catch {
+                  toast({
+                    title: 'Erreur',
+                    description: 'La modification a échoué.',
+                    variant: 'destructive',
+                  });
+                }
+              }}
+          />
+
+          {/* Suppression */}
+          <DeleteConfirmationModal
+              open={deleteModal.open}
+              onOpenChange={(open) => setDeleteModal({ open, client: null })}
+              onConfirm={async () => {
+                if (!deleteModal.client) return;
+                try {
+                  await api.delete(`/clients/${deleteModal.client.id}`);
+                  toast({ title: 'Client supprimé' });
+                  fetchClients();
+                } catch {
+                  toast({
+                    title: 'Erreur',
+                    description: 'La suppression a échoué.',
+                    variant: 'destructive',
+                  });
+                }
+              }}
+              title="Supprimer le client"
+              description="Cette action supprimera définitivement le client."
+              itemName={deleteModal.client?.name}
+          />
+        </div>
+      </DashboardLayout>
   );
 };
 

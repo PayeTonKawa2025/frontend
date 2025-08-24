@@ -1,172 +1,330 @@
-
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 
-interface Order {
-  id: string;
-  orderNumber: string;
-  client: string;
-  total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  createdAt: string;
+import { toast } from '@/hooks/use-toast';
+import { api } from '@/lib/api';
+
+import { Product } from '@/types/Product';
+import { Order, OrderItem, toApiOrder, calcOrderTotal } from '@/types/Order';
+
+import { CancelConfirmationModal } from '@/components/modals/CancelConfirmationModal';
+
+interface Client {
+    id: string;
+    name?: string;
+    firstName?: string;
+    lastName?: string;
+    companyName?: string;
 }
 
 interface EditOrderModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  order: Order | null;
-  onSubmit: (order: Order) => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    order: Order | null;
+    onUpdated: () => void;
 }
 
 export const EditOrderModal: React.FC<EditOrderModalProps> = ({
-  open,
-  onOpenChange,
-  order,
-  onSubmit,
-}) => {
-  const [formData, setFormData] = useState({
-    client: '',
-    total: '',
-    status: 'pending',
-  });
+                                                                  open,
+                                                                  onOpenChange,
+                                                                  order,
+                                                                  onUpdated,
+                                                              }) => {
+    const [clients, setClients] = useState<Client[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [clientId, setClientId] = useState('');
+    const [items, setItems] = useState<OrderItem[]>([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+    // modale d’annulation
+    const [cancelOpen, setCancelOpen] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
 
-  useEffect(() => {
-    if (order) {
-      setFormData({
-        client: order.client,
-        total: order.total.toString(),
-        status: order.status,
-      });
-    }
-  }, [order]);
+    // 🔓 on NE verrouille que FAILED ou CANCELLED
+    const isLocked = useMemo(() => {
+        const s = (order?.status || 'PENDING').toUpperCase();
+        return s === 'FAILED' || s === 'CANCELLED';
+    }, [order?.status]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!order) return;
+    useEffect(() => {
+        const fetchClients = async () => {
+            try {
+                const res = await api.get<Client[]>('/clients');
+                setClients(res.data);
+            } catch {
+                toast({
+                    title: 'Erreur',
+                    description: 'Impossible de charger les clients',
+                    variant: 'destructive',
+                });
+            }
+        };
+        const fetchProducts = async () => {
+            try {
+                const res = await api.get<Product[]>('/products');
+                setProducts(res.data);
+            } catch {
+                toast({
+                    title: 'Erreur',
+                    description: 'Impossible de charger les produits',
+                    variant: 'destructive',
+                });
+            }
+        };
 
-    setIsSubmitting(true);
+        if (open) {
+            fetchClients();
+            fetchProducts();
+            if (order) {
+                setClientId(order.clientId);
+                setItems(order.items || []);
+            }
+        }
+    }, [open, order]);
 
-    const updatedOrder: Order = {
-      ...order,
-      client: formData.client,
-      total: parseFloat(formData.total),
-      status: formData.status as Order['status'],
+    const addItem = () =>
+        setItems((prev) => [...prev, { productId: 0, quantity: 1, unitPrice: 0 }]);
+
+    const updateItem = (index: number, field: keyof OrderItem, value: any) => {
+        setItems((prev) => {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], [field]: value };
+
+            if (field === 'productId') {
+                const product = products.find((p) => p.id === Number(value));
+                if (product) updated[index].unitPrice = product.price;
+            }
+            return updated;
+        });
     };
 
-    // Simulation d'un appel API
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const removeItem = (index: number) =>
+        setItems((prev) => prev.filter((_, i) => i !== index));
 
-    onSubmit(updatedOrder);
-    setIsSubmitting(false);
-    onOpenChange(false);
-  };
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!order) return;
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
+        if (!clientId || items.length === 0) {
+            toast({
+                title: 'Erreur',
+                description: 'Veuillez sélectionner un client et au moins un produit',
+                variant: 'destructive',
+            });
+            return;
+        }
 
-  const mockClients = [
-    'Jean Dupont',
-    'Marie Martin',
-    'Pierre Durand',
-    'Sophie Leblanc',
-    'Michel Bernard',
-  ];
+        if (isLocked) {
+            toast({
+                title: 'Modification impossible',
+                description: 'Cette commande est verrouillée (statut final).',
+                variant: 'destructive',
+            });
+            return;
+        }
 
-  if (!order) return null;
+        setIsSubmitting(true);
+        try {
+            // on repasse status courant tel quel ; les deltas d’items seront gérés par le back (order.updated)
+            await api.patch(`/orders/${order.id}`, toApiOrder({ clientId, items, status: order.status }));
+            toast({ title: 'Commande modifiée' });
+            onUpdated();
+            onOpenChange(false);
+        } catch {
+            toast({ title: 'Erreur', description: 'Modification échouée', variant: 'destructive' });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[525px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <span>Modifier la commande {order.orderNumber}</span>
-            <Badge variant="outline">Modification</Badge>
-          </DialogTitle>
-          <DialogDescription>
-            Modifiez les informations de la commande ci-dessous.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="client">Client</Label>
-            <Select value={formData.client} onValueChange={(value) => handleInputChange('client', value)} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionner un client" />
-              </SelectTrigger>
-              <SelectContent>
-                {mockClients.map((client) => (
-                  <SelectItem key={client} value={client}>
-                    {client}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+    // Confirmation d’annulation via modale custom
+    const confirmCancel = async () => {
+        if (!order?.id) return;
+        setIsCancelling(true);
+        try {
+            // PATCH avec status=CANCELLED (le back publie order.cancelled → restock côté products)
+            await api.patch(`/orders/${order.id}`, toApiOrder({ clientId, items, status: 'CANCELLED' as any }));
+            toast({ title: 'Commande annulée' });
+            onUpdated();
+            onOpenChange(false);
+        } catch {
+            toast({ title: 'Erreur', description: 'Annulation échouée', variant: 'destructive' });
+        } finally {
+            setIsCancelling(false);
+        }
+    };
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="total">Montant total (€)</Label>
-              <Input
-                id="total"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={formData.total}
-                onChange={(e) => handleInputChange('total', e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="status">Statut</Label>
-              <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="processing">En cours</SelectItem>
-                  <SelectItem value="shipped">Expédiée</SelectItem>
-                  <SelectItem value="delivered">Livrée</SelectItem>
-                  <SelectItem value="cancelled">Annulée</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+    if (!order) return null;
 
-          <div className="p-4 bg-muted rounded-lg">
-            <p className="text-sm text-muted-foreground">
-              Numéro de commande: {order.orderNumber}
-            </p>
-          </div>
+    const StatusBanner = () => {
+        const s = (order.status || 'PENDING').toUpperCase();
+        if (s === 'PENDING') {
+            return (
+                <div className="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm">
+                    <span className="font-medium">Statut :</span> En attente de confirmation des stocks…
+                    <div className="mt-1">
+                        <Badge variant="secondary">PENDING</Badge>
+                    </div>
+                </div>
+            );
+        }
+        if (s === 'CONFIRMED') {
+            return (
+                <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm">
+                    <span className="font-medium">Statut :</span> Confirmée
+                    <div className="mt-1">
+                        <Badge variant="default">CONFIRMED</Badge>
+                    </div>
+                </div>
+            );
+        }
+        if (isLocked) {
+            return (
+                <div className="rounded-md border border-muted-foreground/20 bg-muted p-3 text-sm">
+                    <span className="font-medium">Statut :</span>{' '}
+                    {s === 'FAILED' ? 'Échouée' : 'Annulée'} — modification verrouillée.
+                    <div className="mt-1">
+                        <Badge variant="destructive">{s}</Badge>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Modification en cours...' : 'Modifier la commande'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
+    return (
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="sm:max-w-[700px]">
+                    <DialogHeader>
+                        <DialogTitle>Modifier la commande #{order.id}</DialogTitle>
+                        <DialogDescription>Modifiez le client et les produits.</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="mb-2">
+                        <StatusBanner />
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {/* Client */}
+                        <div className="space-y-2">
+                            <Label>Client</Label>
+                            <Select value={clientId} onValueChange={setClientId} disabled={isLocked}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Sélectionner un client" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {clients.map((c) => (
+                                        <SelectItem key={c.id} value={String(c.id)}>
+                                            {c.name ||
+                                                `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() ||
+                                                c.companyName}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Produits */}
+                        <div className="space-y-3">
+                            {items.map((item, idx) => (
+                                <div key={idx} className="grid grid-cols-4 gap-3 items-end">
+                                    <Select
+                                        value={item.productId ? String(item.productId) : ''}
+                                        onValueChange={(v) => updateItem(idx, 'productId', Number(v))}
+                                        disabled={isLocked}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Produit" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {products.map((p) => (
+                                                <SelectItem key={p.id} value={String(p.id)}>
+                                                    {p.name} (€{p.price})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+
+                                    <Input
+                                        type="number"
+                                        min="1"
+                                        value={item.quantity}
+                                        onChange={(e) => updateItem(idx, 'quantity', Number(e.target.value))}
+                                        disabled={isLocked}
+                                    />
+
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={item.unitPrice}
+                                        onChange={(e) => updateItem(idx, 'unitPrice', Number(e.target.value))}
+                                        disabled={isLocked}
+                                    />
+
+                                    <Button
+                                        type="button"
+                                        variant="destructive"
+                                        onClick={() => removeItem(idx)}
+                                        disabled={isLocked}
+                                    >
+                                        Supprimer
+                                    </Button>
+                                </div>
+                            ))}
+
+                            <Button type="button" variant="outline" onClick={addItem} disabled={isLocked}>
+                                Ajouter un produit
+                            </Button>
+                        </div>
+
+                        {/* Total */}
+                        <div className="p-4 bg-muted rounded-lg font-semibold">
+                            Total : €{calcOrderTotal({ items }).toFixed(2)}
+                        </div>
+
+                        <DialogFooter className="flex gap-2">
+                            {(order.status || 'PENDING').toUpperCase() !== 'CANCELLED' && (
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={() => setCancelOpen(true)}
+                                    disabled={isCancelling}
+                                >
+                                    {isCancelling ? 'Annulation…' : 'Annuler la commande'}
+                                </Button>
+                            )}
+                            <Button type="submit" disabled={isLocked || isSubmitting}>
+                                {isLocked ? 'Modification verrouillée' : isSubmitting ? 'Modification…' : 'Modifier la commande'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modale d’annulation */}
+            <CancelConfirmationModal
+                open={cancelOpen}
+                onOpenChange={setCancelOpen}
+                onConfirm={confirmCancel}
+                title="Annuler la commande"
+                description="La commande sera marquée comme annulée et le stock sera rétabli."
+                itemName={`Commande #${order?.id}`}
+            />
+        </>
+    );
 };
